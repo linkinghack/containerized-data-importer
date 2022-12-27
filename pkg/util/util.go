@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"os"
@@ -66,7 +65,7 @@ func GetNamespace() string {
 }
 
 func getNamespace(path string) string {
-	if data, err := ioutil.ReadFile(path); err == nil {
+	if data, err := os.ReadFile(path); err == nil {
 		if ns := strings.TrimSpace(string(data)); len(ns) > 0 {
 			return ns
 		}
@@ -203,11 +202,12 @@ func StreamDataToFile(r io.Reader, fileName string) error {
 // using the specified io.Reader to the specified destination.
 func UnArchiveTar(reader io.Reader, destDir string) error {
 	klog.V(1).Infof("begin untar to %s...\n", destDir)
-	untar := exec.Command("/usr/bin/tar", "--no-same-owner", "-xvC", destDir)
+	untar := exec.Command("/usr/bin/tar", "--preserve-permissions", "--no-same-owner", "-xvC", destDir)
 	untar.Stdin = reader
 	var outBuf, errBuf bytes.Buffer
 	untar.Stdout = &outBuf
 	untar.Stderr = &errBuf
+	klog.V(1).Infof("running untar cmd: %v\n", untar.Args)
 	err := untar.Start()
 	if err != nil {
 		return err
@@ -254,7 +254,7 @@ func WriteTerminationMessageToFile(file, message string) error {
 	// Only write the first line of the message.
 	scanner := bufio.NewScanner(strings.NewReader(message))
 	if scanner.Scan() {
-		err := ioutil.WriteFile(file, []byte(scanner.Text()), os.ModeAppend)
+		err := os.WriteFile(file, []byte(scanner.Text()), os.ModeAppend)
 		if err != nil {
 			return errors.Wrap(err, "could not create termination message file")
 		}

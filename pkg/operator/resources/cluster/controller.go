@@ -69,6 +69,7 @@ func getControllerClusterPolicyRules() []rbacv1.PolicyRule {
 				"create",
 				"update",
 				"delete",
+				"deletecollection",
 			},
 		},
 		{
@@ -109,6 +110,7 @@ func getControllerClusterPolicyRules() []rbacv1.PolicyRule {
 			},
 			Verbs: []string{
 				"get",
+				"create",
 			},
 		},
 		{

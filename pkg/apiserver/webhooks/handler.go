@@ -23,7 +23,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
@@ -34,7 +34,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
-	cdiv1alpha1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1alpha1"
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
 	cdiclient "kubevirt.io/containerized-data-importer/pkg/client/clientset/versioned"
 	"kubevirt.io/containerized-data-importer/pkg/common"
@@ -87,7 +86,7 @@ func newAdmissionHandler(a Admitter) http.Handler {
 func (h *admissionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var body []byte
 	if r.Body != nil {
-		if data, err := ioutil.ReadAll(r.Body); err == nil {
+		if data, err := io.ReadAll(r.Body); err == nil {
 			body = data
 		}
 	}
@@ -183,11 +182,6 @@ func validateDataVolumeResource(ar admissionv1.AdmissionReview) error {
 		{
 			Group:    cdiv1.SchemeGroupVersion.Group,
 			Version:  cdiv1.SchemeGroupVersion.Version,
-			Resource: "datavolumes",
-		},
-		{
-			Group:    cdiv1alpha1.SchemeGroupVersion.Group,
-			Version:  cdiv1alpha1.SchemeGroupVersion.Version,
 			Resource: "datavolumes",
 		},
 	}

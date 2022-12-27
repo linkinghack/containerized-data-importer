@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,19 +26,23 @@ import (
 	ocpconfigv1 "github.com/openshift/api/config/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
 	"kubevirt.io/containerized-data-importer/pkg/common"
+	. "kubevirt.io/containerized-data-importer/pkg/controller/common"
 	"kubevirt.io/containerized-data-importer/pkg/operator"
 )
 
@@ -254,7 +258,7 @@ var _ = Describe("Controller route reconcile loop", func() {
 var _ = Describe("Controller storage class reconcile loop", func() {
 	It("Should set the scratchspaceStorageClass to blank if there is no default sc", func() {
 		reconciler, cdiConfig := createConfigReconciler(createStorageClassList(
-			*createStorageClass("test-default-sc", nil),
+			*CreateStorageClass("test-default-sc", nil),
 		))
 		err := reconciler.reconcileStorageClass(cdiConfig)
 		Expect(err).ToNot(HaveOccurred())
@@ -263,7 +267,7 @@ var _ = Describe("Controller storage class reconcile loop", func() {
 
 	It("Should set the scratchspaceStorageClass to the default without override", func() {
 		reconciler, cdiConfig := createConfigReconciler(createStorageClassList(
-			*createStorageClass("test-default-sc", map[string]string{
+			*CreateStorageClass("test-default-sc", map[string]string{
 				AnnDefaultStorageClass: "true",
 			},
 			)))
@@ -274,12 +278,12 @@ var _ = Describe("Controller storage class reconcile loop", func() {
 
 	It("Should set the scratchspaceStorageClass to the default without override and multiple sc", func() {
 		reconciler, cdiConfig := createConfigReconciler(createStorageClassList(
-			*createStorageClass("test-sc3", nil),
-			*createStorageClass("test-default-sc", map[string]string{
+			*CreateStorageClass("test-sc3", nil),
+			*CreateStorageClass("test-default-sc", map[string]string{
 				AnnDefaultStorageClass: "true",
 			}),
-			*createStorageClass("test-sc", nil),
-			*createStorageClass("test-sc2", nil),
+			*CreateStorageClass("test-sc", nil),
+			*CreateStorageClass("test-sc2", nil),
 		))
 		err := reconciler.reconcileStorageClass(cdiConfig)
 		Expect(err).ToNot(HaveOccurred())
@@ -288,12 +292,12 @@ var _ = Describe("Controller storage class reconcile loop", func() {
 
 	It("Should set the scratchspaceStorageClass to the override even with default", func() {
 		reconciler, cdiConfig := createConfigReconciler(createStorageClassList(
-			*createStorageClass("test-sc3", nil),
-			*createStorageClass("test-default-sc", map[string]string{
+			*CreateStorageClass("test-sc3", nil),
+			*CreateStorageClass("test-default-sc", map[string]string{
 				AnnDefaultStorageClass: "true",
 			}),
-			*createStorageClass("test-sc", nil),
-			*createStorageClass("test-sc2", nil),
+			*CreateStorageClass("test-sc", nil),
+			*CreateStorageClass("test-sc2", nil),
 		))
 		override := "test-sc"
 		cdiConfig.Spec.ScratchSpaceStorageClass = &override
@@ -304,12 +308,12 @@ var _ = Describe("Controller storage class reconcile loop", func() {
 
 	It("Should set the scratchspaceStorageClass to the default with invalid override", func() {
 		reconciler, cdiConfig := createConfigReconciler(createStorageClassList(
-			*createStorageClass("test-sc3", nil),
-			*createStorageClass("test-default-sc", map[string]string{
+			*CreateStorageClass("test-sc3", nil),
+			*CreateStorageClass("test-default-sc", map[string]string{
 				AnnDefaultStorageClass: "true",
 			}),
-			*createStorageClass("test-sc", nil),
-			*createStorageClass("test-sc2", nil),
+			*CreateStorageClass("test-sc", nil),
+			*CreateStorageClass("test-sc2", nil),
 		))
 		override := "invalid"
 		cdiConfig.Spec.ScratchSpaceStorageClass = &override
@@ -333,7 +337,9 @@ var _ = Describe("Controller ImportProxy reconcile loop", func() {
 	var trustedCAProxy = "user-ca-bundle"
 
 	DescribeTable("Should set ImportProxy correctly if ClusterWideProxy with correct URLs exists", func(proxyHTTPURL string, proxyHTTPSURL string, noProxyDomains string, trustedCAName string, expect string, endpType string) {
-		reconciler, cdiConfig := createConfigReconciler(createClusterWideProxy(proxyHTTPURL, proxyHTTPSURL, noProxyDomains, trustedCAProxy))
+		trustedCAProxyConfigMap := createConfigMap(trustedCAProxy, ClusterWideProxyConfigMapNameSpace)
+		trustedCAProxyConfigMap.Data = map[string]string{ClusterWideProxyConfigMapKey: "fake_cert"}
+		reconciler, cdiConfig := createConfigReconciler(createClusterWideProxy(proxyHTTPURL, proxyHTTPSURL, noProxyDomains, trustedCAProxy), trustedCAProxyConfigMap)
 		_, err := reconciler.Reconcile(context.TODO(), reconcile.Request{})
 		Expect(err).ToNot(HaveOccurred())
 		err = reconciler.client.Get(context.TODO(), types.NamespacedName{Name: reconciler.configName}, cdiConfig)
@@ -355,6 +361,15 @@ var _ = Describe("Controller ImportProxy reconcile loop", func() {
 		Entry("successfully get the list of hostnames and/or CIDRs that proxy should not be used", "", "", noProxyDomains, "", noProxyDomains, common.ImportProxyNoProxy),
 		Entry("successfully get ConfiMap CA name", "", "", "", trustedCAProxy, trustedCAProxy, trustedCAProxy),
 	)
+
+	It("Should error and record event if TrustedCAProxy ConfigMap is missing", func() {
+		reconciler, _ := createConfigReconciler(createClusterWideProxy(proxyHTTPURL, proxyHTTPSURL, noProxyDomains, trustedCAProxy))
+		_, err := reconciler.Reconcile(context.TODO(), reconcile.Request{})
+		Expect(err).To(HaveOccurred())
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+		event := <-reconciler.recorder.(*record.FakeRecorder).Events
+		Expect(event).To(ContainSubstring(errResourceDoesntExist))
+	})
 
 	It("Should not change the CDIConfig when updating the ClusterWideProxy if the CDIConfig proxy information already exist", func() {
 		reconciler, cdiConfig := createConfigReconciler()
@@ -387,9 +402,10 @@ var _ = Describe("Controller ImportProxy reconcile loop", func() {
 
 		test := &corev1.ConfigMap{}
 		err = reconciler.client.Get(context.TODO(), types.NamespacedName{Name: ClusterWideProxyConfigMapName, Namespace: ClusterWideProxyConfigMapNameSpace}, test)
+		Expect(err).ToNot(HaveOccurred())
 
 		configMap := &corev1.ConfigMap{}
-		err = reconciler.client.Get(context.TODO(), types.NamespacedName{Name: common.ImportProxyConfigMapName, Namespace: reconciler.cdiNamespace}, configMap)
+		err = reconciler.client.Get(context.TODO(), types.NamespacedName{Name: ClusterWideProxyConfigMapName, Namespace: reconciler.cdiNamespace}, configMap)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(configMap.Labels[common.AppKubernetesComponentLabel]).To(Equal("storage"))
 
@@ -767,6 +783,86 @@ var _ = Describe("Controller default pod resource requirements reconcile loop", 
 	})
 })
 
+var _ = Describe("getClusterWideProxy", func() {
+	var proxyHTTPURL = "http://user:pswd@www.myproxy.com"
+	var proxyHTTPSURL = "https://user:pswd@www.myproxy.com"
+	var noProxyDomains = ".noproxy.com"
+	var trustedCAName = "user-ca-bundle"
+
+	It("Should return a not empty cluster wide proxy obj", func() {
+		client := CreateClient(createClusterWideProxy(proxyHTTPURL, proxyHTTPSURL, noProxyDomains, trustedCAName))
+		proxy, err := getClusterWideProxy(client)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(proxy).ToNot(BeNil())
+
+		By("should return a proxy https url")
+		Expect(proxyHTTPSURL).To(Equal(proxy.Status.HTTPSProxy))
+
+		By("should return a proxy http url")
+		Expect(proxyHTTPURL).To(Equal(proxy.Status.HTTPProxy))
+
+		By("should return a noProxy list of domains")
+		Expect(noProxyDomains).To(Equal(proxy.Status.NoProxy))
+
+		By("should return a CA ConfigMap name")
+		Expect(trustedCAName).To(Equal(proxy.Spec.TrustedCA.Name))
+	})
+
+	It("Should return a nil cluster wide proxy obj", func() {
+		client := CreateClient()
+		proxy, err := getClusterWideProxy(client)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(proxy).To(BeEquivalentTo(&ocpconfigv1.Proxy{}))
+	})
+})
+
+var _ = Describe("GetImportProxyConfig", func() {
+	var proxyHTTPURL = "http://user:pswd@www.myproxy.com"
+	var proxyHTTPSURL = "https://user:pswd@www.myproxy.com"
+	var noProxyDomains = ".noproxy.com"
+	var trustedCAName = "user-ca-bundle"
+
+	It("should return valid proxy information from a CDIConfig with importer proxy configured", func() {
+		cdiConfig := MakeEmptyCDIConfigSpec("cdiconfig")
+		cdiConfig.Status.ImportProxy = createImportProxy(proxyHTTPURL, proxyHTTPSURL, noProxyDomains, trustedCAName)
+		field, _ := GetImportProxyConfig(cdiConfig, common.ImportProxyHTTP)
+		Expect(proxyHTTPURL).To(Equal(field))
+		field, _ = GetImportProxyConfig(cdiConfig, common.ImportProxyHTTPS)
+		Expect(proxyHTTPSURL).To(Equal(field))
+		field, _ = GetImportProxyConfig(cdiConfig, common.ImportProxyNoProxy)
+		Expect(noProxyDomains).To(Equal(field))
+		field, _ = GetImportProxyConfig(cdiConfig, common.ImportProxyConfigMapName)
+		Expect(trustedCAName).To(Equal(field))
+	})
+
+	It("should return blank proxy information from a CDIConfig with importer proxy not configured", func() {
+		cdiConfig := MakeEmptyCDIConfigSpec("cdiconfig")
+		cdiConfig.Status.ImportProxy = createImportProxy("", "", "", "")
+		field, _ := GetImportProxyConfig(cdiConfig, common.ImportProxyHTTP)
+		Expect("").To(Equal(field))
+		field, _ = GetImportProxyConfig(cdiConfig, common.ImportProxyHTTPS)
+		Expect("").To(Equal(field))
+		field, _ = GetImportProxyConfig(cdiConfig, common.ImportProxyNoProxy)
+		Expect("").To(Equal(field))
+		field, _ = GetImportProxyConfig(cdiConfig, common.ImportProxyConfigMapName)
+		Expect("").To(Equal(field))
+	})
+
+	It("should return error if the requested field does not exist", func() {
+		cdiConfig := MakeEmptyCDIConfigSpec("cdiconfig")
+		cdiConfig.Status.ImportProxy = createImportProxy("", "", "", "")
+		_, err := GetImportProxyConfig(cdiConfig, "nonExistingField")
+		Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("CDIConfig ImportProxy does not have the field: %s\n", "nonExistingField")))
+	})
+
+	It("should return error if the ImportProxy field is nil", func() {
+		cdiConfig := MakeEmptyCDIConfigSpec("cdiconfig")
+		cdiConfig.Status.ImportProxy = nil
+		_, err := GetImportProxyConfig(cdiConfig, common.ImportProxyHTTP)
+		Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to get field, the CDIConfig ImportProxy is nil\n")))
+	})
+})
+
 func createConfigReconciler(objects ...runtime.Object) (*CDIConfigReconciler, *cdiv1.CDIConfig) {
 	objs := []runtime.Object{}
 	objs = append(objs, objects...)
@@ -801,6 +897,7 @@ func createConfigReconciler(objects ...runtime.Object) (*CDIConfigReconciler, *c
 		uncachedClient:         cl,
 		scheme:                 s,
 		log:                    configLog,
+		recorder:               record.NewFakeRecorder(1),
 		configName:             "cdiconfig",
 		cdiNamespace:           testNamespace,
 		uploadProxyServiceName: testServiceName,
@@ -915,6 +1012,72 @@ func createConfigMap(name, namespace string) *corev1.ConfigMap {
 		},
 	}
 	return cm
+}
+
+func createDefaultPodResourceRequirements(limitCPUValue string, limitMemoryValue string, requestCPUValue string, requestMemoryValue string) *corev1.ResourceRequirements {
+	if limitCPUValue == "" {
+		limitCPUValue = defaultCPULimit
+	}
+	cpuLimit, err := resource.ParseQuantity(limitCPUValue)
+	Expect(err).ToNot(HaveOccurred())
+	if limitMemoryValue == "" {
+		limitMemoryValue = defaultMemLimit
+	}
+	memLimit, err := resource.ParseQuantity(limitMemoryValue)
+	Expect(err).ToNot(HaveOccurred())
+	if requestCPUValue == "" {
+		requestCPUValue = defaultCPURequest
+	}
+	cpuRequest, err := resource.ParseQuantity(requestCPUValue)
+	Expect(err).ToNot(HaveOccurred())
+	if requestMemoryValue == "" {
+		requestMemoryValue = defaultMemRequest
+	}
+	memRequest, err := resource.ParseQuantity(requestMemoryValue)
+	Expect(err).ToNot(HaveOccurred())
+	return &corev1.ResourceRequirements{
+		Limits: map[corev1.ResourceName]resource.Quantity{
+			corev1.ResourceCPU:    cpuLimit,
+			corev1.ResourceMemory: memLimit},
+		Requests: map[corev1.ResourceName]resource.Quantity{
+			corev1.ResourceCPU:    cpuRequest,
+			corev1.ResourceMemory: memRequest},
+	}
+}
+
+func createClusterWideProxy(HTTPProxy string, HTTPSProxy string, noProxy string, trustedCAName string) *ocpconfigv1.Proxy {
+	proxy := &ocpconfigv1.Proxy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ClusterWideProxyName,
+			UID:  types.UID(ClusterWideProxyAPIKind + "-" + ClusterWideProxyName),
+		},
+		Spec: ocpconfigv1.ProxySpec{
+			HTTPProxy:          HTTPProxy,
+			HTTPSProxy:         HTTPSProxy,
+			NoProxy:            noProxy,
+			ReadinessEndpoints: []string{},
+			TrustedCA: ocpconfigv1.ConfigMapNameReference{
+				Name: trustedCAName,
+			},
+		},
+		Status: ocpconfigv1.ProxyStatus{
+			HTTPProxy:  HTTPProxy,
+			HTTPSProxy: HTTPSProxy,
+			NoProxy:    noProxy,
+		},
+	}
+	return proxy
+}
+
+func createClusterWideProxyCAConfigMap(certBytes string) *corev1.ConfigMap {
+	configMap := &v1.ConfigMap{
+		TypeMeta:   metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{Name: ClusterWideProxyConfigMapName, Namespace: ClusterWideProxyConfigMapNameSpace},
+		Immutable:  new(bool),
+		Data:       map[string]string{ClusterWideProxyConfigMapKey: string(certBytes)},
+		BinaryData: map[string][]byte{},
+	}
+	return configMap
 }
 
 func createImportProxy(http, https, noproxy, ca string) *cdiv1.ImportProxy {

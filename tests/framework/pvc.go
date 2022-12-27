@@ -19,7 +19,7 @@ import (
 	"k8s.io/klog/v2"
 
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
-	"kubevirt.io/containerized-data-importer/pkg/controller"
+	controller "kubevirt.io/containerized-data-importer/pkg/controller/common"
 	"kubevirt.io/containerized-data-importer/pkg/image"
 	"kubevirt.io/containerized-data-importer/pkg/util/naming"
 	"kubevirt.io/containerized-data-importer/tests/utils"
@@ -44,7 +44,7 @@ func (f *Framework) CreateBoundPVCFromDefinition(def *k8sv1.PersistentVolumeClai
 
 // DeletePVC is a wrapper around utils.DeletePVC
 func (f *Framework) DeletePVC(pvc *k8sv1.PersistentVolumeClaim) error {
-	return utils.DeletePVC(f.K8sClient, f.Namespace.Name, pvc)
+	return utils.DeletePVC(f.K8sClient, f.Namespace.Name, pvc.Name)
 }
 
 // WaitForPersistentVolumeClaimPhase is a wrapper around utils.WaitForPersistentVolumeClaimPhase

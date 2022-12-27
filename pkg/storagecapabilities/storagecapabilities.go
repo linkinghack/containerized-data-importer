@@ -62,6 +62,20 @@ var CapabilitiesByProvisionerKey = map[string][]StorageCapabilities{
 	// Trident
 	"csi.trident.netapp.io/ontap-nas": {{AccessMode: v1.ReadWriteMany, VolumeMode: v1.PersistentVolumeFilesystem}},
 	"csi.trident.netapp.io/ontap-san": {{AccessMode: v1.ReadWriteOnce, VolumeMode: v1.PersistentVolumeBlock}},
+	// topolvm
+	"topolvm.cybozu.com": createTopoLVMCapabilities(),
+	// OpenStack Cinder
+	"cinder.csi.openstack.org": createCinderVolumeCapabilities(),
+}
+
+// ProvisionerNoobaa is the provisioner string for the Noobaa object bucket provisioner which does not work with CDI
+const ProvisionerNoobaa = "openshift-storage.noobaa.io/obc"
+
+// UnsupportedProvisioners is a hash of provisioners which are known not to work with CDI
+var UnsupportedProvisioners = map[string]struct{}{
+	// The following provisioners may be found in Rook/Ceph deployments and are related to object storage
+	"openshift-storage.ceph.rook.io/bucket": {},
+	ProvisionerNoobaa:                       {},
 }
 
 // Get finds and returns a predefined StorageCapabilities for a given StorageClass
@@ -189,6 +203,15 @@ func createDellUnityCapabilities() []StorageCapabilities {
 	}
 }
 
+func createTopoLVMCapabilities() []StorageCapabilities {
+	return []StorageCapabilities{
+		{AccessMode: v1.ReadWriteOnce, VolumeMode: v1.PersistentVolumeBlock},
+		{AccessMode: v1.ReadWriteOnce, VolumeMode: v1.PersistentVolumeFilesystem},
+		{AccessMode: v1.ReadWriteOncePod, VolumeMode: v1.PersistentVolumeBlock},
+		{AccessMode: v1.ReadWriteOncePod, VolumeMode: v1.PersistentVolumeFilesystem},
+	}
+}
+
 func createOpenStorageVolumeCapabilities() []StorageCapabilities {
 	return []StorageCapabilities{
 		{AccessMode: v1.ReadWriteOnce, VolumeMode: v1.PersistentVolumeBlock},
@@ -199,6 +222,13 @@ func createOpenStorageVolumeCapabilities() []StorageCapabilities {
 func createOpenStorageSharedVolumeCapabilities() []StorageCapabilities {
 	return []StorageCapabilities{
 		{AccessMode: v1.ReadWriteMany, VolumeMode: v1.PersistentVolumeBlock},
+		{AccessMode: v1.ReadWriteOnce, VolumeMode: v1.PersistentVolumeFilesystem},
+	}
+}
+
+func createCinderVolumeCapabilities() []StorageCapabilities {
+	return []StorageCapabilities{
+		{AccessMode: v1.ReadWriteOnce, VolumeMode: v1.PersistentVolumeBlock},
 		{AccessMode: v1.ReadWriteOnce, VolumeMode: v1.PersistentVolumeFilesystem},
 	}
 }

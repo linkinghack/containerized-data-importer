@@ -36,7 +36,7 @@ To upload data to a PVC from a client machine first create a DataVolume with an 
 
 ### Prepare an empty Kubevirt VM disk
 
-The special source `none` can be used to populate a volume with an empty Kubevirt VM disk.  This source is valid only with the `kubevirt` contentType.  CDI will create a VM disk on the PVC which uses all of the available space.  See [here](doc/blank-raw-image.md) for an example.
+The special source `blank` can be used to populate a volume with an empty Kubevirt VM disk.  This source is valid only with the `kubevirt` contentType.  CDI will create a VM disk on the PVC which uses all of the available space.  See [here](doc/blank-raw-image.md) for an example.
 
 ### Import from oVirt
 
@@ -82,13 +82,15 @@ There are quite a few examples in the [example manifests](https://github.com/kub
 
 CDI includes a self contained development and test environment.  We use Docker to build, and we provide a simple way to get a test cluster up and running on your laptop. The development tools include a version of kubectl that you can use to communicate with the cluster. A wrapper script to communicate with the cluster can be invoked using ./cluster-up/kubectl.sh.
 
-```
+```bash
 $ mkdir $GOPATH/src/kubevirt.io && cd $GOPATH/src/kubevirt.io
 $ git clone https://github.com/kubevirt/containerized-data-importer && cd containerized-data-importer
 $ make cluster-up
 $ make cluster-sync
 $ ./cluster-up/kubectl.sh .....
 ```
+For development on external cluster (not provisioned by our CI),
+check out the [external provider](cluster-sync/external/README.md).
 
 ## Storage notes
 

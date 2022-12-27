@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -32,7 +32,8 @@ import (
 
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
 	"kubevirt.io/containerized-data-importer/pkg/common"
-	"kubevirt.io/containerized-data-importer/pkg/controller"
+	cont "kubevirt.io/containerized-data-importer/pkg/controller"
+	controller "kubevirt.io/containerized-data-importer/pkg/controller/common"
 	"kubevirt.io/containerized-data-importer/tests"
 	"kubevirt.io/containerized-data-importer/tests/framework"
 	"kubevirt.io/containerized-data-importer/tests/utils"
@@ -319,7 +320,7 @@ var _ = Describe("[Istio] Namespace sidecar injection", func() {
 		dataVolume := utils.NewDataVolumeWithHTTPImport("istio-sidecar-injection-test", "100Mi", tinyCoreIsoExternalURL)
 		By(fmt.Sprintf("Create new datavolume %s", dataVolume.Name))
 		// We set the Immediate Binding annotation to true, to eliminate creation of the consumer pod, which will also fail due to the Istio sidecar.
-		dataVolume.Annotations[controller.AnnImmediateBinding] = "true"
+		dataVolume.Annotations[cont.AnnImmediateBinding] = "true"
 		dataVolume.Annotations[controller.AnnPodSidecarInjection] = "true"
 		dataVolume, err := utils.CreateDataVolumeFromDefinition(f.CdiClient, f.Namespace.Name, dataVolume)
 		Expect(err).ToNot(HaveOccurred())
@@ -347,7 +348,7 @@ var _ = Describe("[Istio] Namespace sidecar injection", func() {
 	It("[test_id:6492] Should successfully import with namespace sidecar injection enabled and default sidecar.istio.io/inject", func() {
 		dataVolume := utils.NewDataVolumeWithHTTPImport("istio-sidecar-injection-test", "100Mi", tinyCoreIsoExternalURL)
 		By(fmt.Sprintf("Create new datavolume %s", dataVolume.Name))
-		dataVolume.Annotations[controller.AnnImmediateBinding] = "true"
+		dataVolume.Annotations[cont.AnnImmediateBinding] = "true"
 		dataVolume, err := utils.CreateDataVolumeFromDefinition(f.CdiClient, f.Namespace.Name, dataVolume)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -504,7 +505,7 @@ var _ = Describe("[rfe_id:1118][crit:high][vendor:cnv-qe@redhat.com][level:compo
 				if err == nil {
 					defer resp.Body.Close()
 					if resp.StatusCode == http.StatusOK {
-						bodyBytes, err := ioutil.ReadAll(resp.Body)
+						bodyBytes, err := io.ReadAll(resp.Body)
 						Expect(err).NotTo(HaveOccurred())
 						match := importRegExp.FindStringSubmatch(string(bodyBytes))
 						if match != nil {
@@ -1005,7 +1006,7 @@ var _ = Describe("[rfe_id:1115][crit:high][vendor:cnv-qe@redhat.com][level:compo
 				var result map[string]interface{}
 				resp := f.MakePrometheusHTTPRequest("query?query=kubevirt_cdi_import_dv_unusual_restartcount_total>0")
 				defer resp.Body.Close()
-				bodyBytes, err := ioutil.ReadAll(resp.Body)
+				bodyBytes, err := io.ReadAll(resp.Body)
 				if err != nil {
 					return false
 				}

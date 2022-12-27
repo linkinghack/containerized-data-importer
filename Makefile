@@ -20,7 +20,8 @@
 		format \
 		goveralls \
 		release-description \
-		bazel-generate bazel-build bazel-build-images bazel-push-images
+		bazel-generate bazel-build bazel-build-images bazel-push-images \
+		fossa
 
 DOCKER?=1
 ifeq (${DOCKER}, 1)
@@ -46,14 +47,16 @@ update-codegen:
 
 generate: update-codegen bazel-generate generate-doc
 
-generate-verify: generate-doc
-	${DO_BAZ} "./hack/verify-codegen.sh"
+generate-verify: generate
 	git difftool -y --trust-exit-code --extcmd=./hack/diff-csv.sh
 
 gomod-update:
 	${DO_BAZ} "./hack/build/dep-update.sh"
 
 deps-update: gomod-update bazel-generate
+
+deps-verify: deps-update
+	git difftool -y --trust-exit-code --extcmd=./hack/diff-csv.sh
 
 rpm-deps:
 	${DO_BAZ} "CUSTOM_REPO=${CUSTOM_REPO} ./hack/build/rpm-deps.sh"
@@ -156,6 +159,9 @@ generate-doc: build-docgen
 
 build-docgen:
 	${DO_BAZ} "BUILD_ARCH=${BUILD_ARCH} ./hack/build/bazel-build-metricsdocs.sh"
+
+fossa:
+	${DO_BAZ} "FOSSA_TOKEN_FILE=${FOSSA_TOKEN_FILE} ./hack/fossa.sh"
 
 help:
 	@echo "Usage: make [Targets ...]"

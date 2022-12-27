@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"kubevirt.io/containerized-data-importer/pkg/controller"
+	cc "kubevirt.io/containerized-data-importer/pkg/controller/common"
 	"kubevirt.io/containerized-data-importer/pkg/operator"
 	"kubevirt.io/containerized-data-importer/pkg/util"
 	sdk "kubevirt.io/controller-lifecycle-operator-sdk/pkg/sdk"
@@ -39,7 +39,8 @@ import (
 const sccName = "containerized-data-importer"
 
 func setSCC(scc *secv1.SecurityContextConstraints) {
-	scc.Priority = &[]int32{10}[0]
+	// Ensure we are just good citizens that don't want to compete against other prioritized SCCs
+	scc.Priority = nil
 	scc.RunAsUser = secv1.RunAsUserStrategyOptions{
 		Type: secv1.RunAsUserStrategyMustRunAsNonRoot,
 	}
@@ -66,9 +67,10 @@ func setSCC(scc *secv1.SecurityContextConstraints) {
 	}
 }
 
-func ensureSCCExists(logger logr.Logger, c client.Client, saNamespace, saName string) error {
+func ensureSCCExists(logger logr.Logger, c client.Client, saNamespace, saName, cronSaName string) error {
 	scc := &secv1.SecurityContextConstraints{}
 	userName := fmt.Sprintf("system:serviceaccount:%s:%s", saNamespace, saName)
+	cronUserName := fmt.Sprintf("system:serviceaccount:%s:%s", saNamespace, cronSaName)
 
 	err := c.Get(context.TODO(), client.ObjectKey{Name: sccName}, scc)
 	if meta.IsNoMatchError(err) {
@@ -76,7 +78,7 @@ func ensureSCCExists(logger logr.Logger, c client.Client, saNamespace, saName st
 		logger.V(3).Info("No match error for SCC, must not be in openshift")
 		return nil
 	} else if errors.IsNotFound(err) {
-		cr, err := controller.GetActiveCDI(c)
+		cr, err := cc.GetActiveCDI(c)
 		if err != nil {
 			return err
 		}
@@ -94,6 +96,7 @@ func ensureSCCExists(logger logr.Logger, c client.Client, saNamespace, saName st
 			},
 			Users: []string{
 				userName,
+				cronUserName,
 			},
 		}
 
@@ -116,6 +119,9 @@ func ensureSCCExists(logger logr.Logger, c client.Client, saNamespace, saName st
 
 	if !sdk.ContainsStringValue(scc.Users, userName) {
 		scc.Users = append(scc.Users, userName)
+	}
+	if !sdk.ContainsStringValue(scc.Users, cronUserName) {
+		scc.Users = append(scc.Users, cronUserName)
 	}
 
 	if !apiequality.Semantic.DeepEqual(origSCC, scc) {

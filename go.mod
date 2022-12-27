@@ -18,7 +18,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/kubernetes-csi/external-snapshotter/client/v4 v4.2.0
+	github.com/kubernetes-csi/external-snapshotter/client/v6 v6.0.1
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
 	github.com/openshift/api v0.0.0
@@ -145,6 +145,7 @@ require (
 
 replace (
 	github.com/aws/aws-sdk-go => github.com/aws/aws-sdk-go v1.15.77
+	github.com/chzyer/logex => github.com/chzyer/logex v1.2.1
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20211217221424-8779abfbd571
 	github.com/openshift/client-go => github.com/openshift/client-go v0.0.0-20211209144617-7385dd6338e3
 	github.com/openshift/library-go => github.com/mhenriks/library-go v0.0.0-20211221173158-d6e4bcc60f0a

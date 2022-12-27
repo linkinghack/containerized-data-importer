@@ -15,7 +15,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -29,7 +28,7 @@ import (
 
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
 	"kubevirt.io/containerized-data-importer/pkg/common"
-	"kubevirt.io/containerized-data-importer/pkg/controller"
+	cc "kubevirt.io/containerized-data-importer/pkg/controller/common"
 	"kubevirt.io/containerized-data-importer/pkg/image"
 	"kubevirt.io/containerized-data-importer/pkg/importer"
 	"kubevirt.io/containerized-data-importer/pkg/util"
@@ -69,7 +68,7 @@ func getHTTPEp(ep string) string {
 	if len(readyFile) == 0 {
 		return ep
 	}
-	imageName, err := ioutil.ReadFile(readyFile)
+	imageName, err := os.ReadFile(readyFile)
 	if err != nil {
 		klog.Errorf("Failed reading file %s: %+v", readyFile, err)
 		os.Exit(1)
@@ -95,7 +94,7 @@ func touchDoneFile() {
 func main() {
 	defer klog.Flush()
 
-	certsDirectory, err := ioutil.TempDir("", "certsdir")
+	certsDirectory, err := os.MkdirTemp("", "certsdir")
 	if err != nil {
 		panic(err)
 	}
@@ -122,7 +121,7 @@ func main() {
 	defer fsyncDataFile(contentType, volumeMode)
 
 	//Registry import currently support kubevirt content type only
-	if contentType != string(cdiv1.DataVolumeKubeVirt) && (source == controller.SourceRegistry || source == controller.SourceImageio) {
+	if contentType != string(cdiv1.DataVolumeKubeVirt) && (source == cc.SourceRegistry || source == cc.SourceImageio) {
 		klog.Errorf("Unsupported content type %s when importing from %s", contentType, source)
 		os.Exit(1)
 	}
@@ -132,7 +131,7 @@ func main() {
 		klog.Errorf("%+v", err)
 		os.Exit(1)
 	}
-	if source == controller.SourceNone {
+	if source == cc.SourceNone {
 		err := handleEmptyImage(contentType, imageSize, availableDestSpace, preallocation, volumeMode, filesystemOverhead)
 		if err != nil {
 			klog.Errorf("%+v", err)
@@ -251,28 +250,28 @@ func newDataSource(source string, contentType string, volumeMode v1.PersistentVo
 	finalCheckpoint, _ := util.ParseEnvVar(common.ImporterFinalCheckpoint, false)
 
 	switch source {
-	case controller.SourceHTTP:
+	case cc.SourceHTTP:
 		ds, err := importer.NewHTTPDataSource(getHTTPEp(ep), acc, sec, certDir, cdiv1.DataVolumeContentType(contentType))
 		if err != nil {
 			errorCannotConnectDataSource(err, "http")
 		}
 		return ds
-	case controller.SourceImageio:
+	case cc.SourceImageio:
 		ds, err := importer.NewImageioDataSource(ep, acc, sec, certDir, diskID, currentCheckpoint, previousCheckpoint)
 		if err != nil {
 			errorCannotConnectDataSource(err, "imageio")
 		}
 		return ds
-	case controller.SourceRegistry:
+	case cc.SourceRegistry:
 		ds := importer.NewRegistryDataSource(ep, acc, sec, certDir, insecureTLS)
 		return ds
-	case controller.SourceS3:
+	case cc.SourceS3:
 		ds, err := importer.NewS3DataSource(ep, acc, sec, certDir)
 		if err != nil {
 			errorCannotConnectDataSource(err, "s3")
 		}
 		return ds
-	case controller.SourceVDDK:
+	case cc.SourceVDDK:
 		ds, err := importer.NewVDDKDataSource(ep, acc, sec, thumbprint, uuid, backingFile, currentCheckpoint, previousCheckpoint, finalCheckpoint, volumeMode)
 		if err != nil {
 			errorCannotConnectDataSource(err, "vddk")

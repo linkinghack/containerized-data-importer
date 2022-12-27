@@ -28,6 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
+
+	cc "kubevirt.io/containerized-data-importer/pkg/controller/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -76,22 +78,34 @@ func (r *DataSourceReconciler) update(ctx context.Context, dataSource *cdiv1.Dat
 	sourcePVC := dataSource.Spec.Source.PVC
 	if sourcePVC != nil {
 		dv := &cdiv1.DataVolume{}
-		ns := getNamespace(sourcePVC.Namespace, dataSource.Namespace)
+		ns := cc.GetNamespace(sourcePVC.Namespace, dataSource.Namespace)
+		isReady := false
 		if err := r.client.Get(ctx, types.NamespacedName{Namespace: ns, Name: sourcePVC.Name}, dv); err != nil {
-			if k8serrors.IsNotFound(err) {
-				r.log.Info("DataVolume not found", "name", sourcePVC.Name)
-				updateDataSourceCondition(dataSource, cdiv1.DataSourceReady, corev1.ConditionFalse, "DataVolume not found", notFound)
-			} else {
+			if !k8serrors.IsNotFound(err) {
 				return err
 			}
+			pvc := &corev1.PersistentVolumeClaim{}
+			if err := r.client.Get(ctx, types.NamespacedName{Namespace: ns, Name: sourcePVC.Name}, pvc); err != nil {
+				if !k8serrors.IsNotFound(err) {
+					return err
+				}
+				r.log.Info("PVC not found", "name", sourcePVC.Name)
+				updateDataSourceCondition(dataSource, cdiv1.DataSourceReady, corev1.ConditionFalse, "PVC not found", cc.NotFound)
+			} else {
+				isReady = true
+			}
 		} else if dv.Status.Phase == cdiv1.Succeeded {
-			updateDataSourceCondition(dataSource, cdiv1.DataSourceReady, corev1.ConditionTrue, "DataSource is ready to be consumed", ready)
+			isReady = true
 		} else {
 			updateDataSourceCondition(dataSource, cdiv1.DataSourceReady, corev1.ConditionFalse, fmt.Sprintf("Import DataVolume phase %s", dv.Status.Phase), string(dv.Status.Phase))
+		}
+		if isReady {
+			updateDataSourceCondition(dataSource, cdiv1.DataSourceReady, corev1.ConditionTrue, "DataSource is ready to be consumed", ready)
 		}
 	} else {
 		updateDataSourceCondition(dataSource, cdiv1.DataSourceReady, corev1.ConditionFalse, "No source PVC set", noPvc)
 	}
+
 	if !reflect.DeepEqual(dataSource, dataSourceCopy) {
 		if err := r.client.Update(ctx, dataSource); err != nil {
 			return err
@@ -159,7 +173,7 @@ func addDataSourceControllerWatches(mgr manager.Manager, c controller.Controller
 
 	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &cdiv1.DataSource{}, dataSourcePvcField, func(obj client.Object) []string {
 		if pvc := obj.(*cdiv1.DataSource).Spec.Source.PVC; pvc != nil {
-			ns := getNamespace(pvc.Namespace, obj.GetNamespace())
+			ns := cc.GetNamespace(pvc.Namespace, obj.GetNamespace())
 			return []string{getKey(ns, pvc.Name)}
 		}
 		return nil
@@ -195,6 +209,18 @@ func addDataSourceControllerWatches(mgr manager.Manager, c controller.Controller
 	); err != nil {
 		return err
 	}
+
+	if err := c.Watch(&source.Kind{Type: &corev1.PersistentVolumeClaim{}},
+		handler.EnqueueRequestsFromMapFunc(mapToDataSource),
+		predicate.Funcs{
+			CreateFunc: func(e event.CreateEvent) bool { return true },
+			DeleteFunc: func(e event.DeleteEvent) bool { return true },
+			UpdateFunc: func(e event.UpdateEvent) bool { return false },
+		},
+	); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -202,11 +228,4 @@ func sameDataSourcePvc(objOld, objNew client.Object) bool {
 	dsOld, okOld := objOld.(*cdiv1.DataSource)
 	dsNew, okNew := objNew.(*cdiv1.DataSource)
 	return okOld && okNew && reflect.DeepEqual(dsOld.Spec.Source.PVC, dsNew.Spec.Source.PVC)
-}
-
-func getNamespace(namespace, defaultNamespace string) string {
-	if namespace == "" {
-		return defaultNamespace
-	}
-	return namespace
 }

@@ -220,6 +220,7 @@ var _ = Describe("Controller", func() {
 				scc, err := getSCC(args.client, scc)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(scc.Labels[common.AppKubernetesPartOfLabel]).To(Equal("testing"))
+				Expect(scc.Priority).To(BeNil())
 
 				for _, eu := range []string{"system:serviceaccount:cdi:cdi-sa"} {
 					found := false
@@ -1721,10 +1722,7 @@ func createNotReadyEventValidationMap() map[string]bool {
 	match[normalCreateSuccess+" *v1.Role cdi-uploadproxy"] = false
 	match[normalCreateSuccess+" *v1.Deployment cdi-uploadproxy"] = false
 	match[normalCreateSuccess+" *v1.ServiceAccount cdi-cronjob"] = false
-	match[normalCreateSuccess+" *v1.RoleBinding cdi-cronjob"] = false
-	match[normalCreateSuccess+" *v1.Role cdi-cronjob"] = false
 	match[normalCreateSuccess+" *v1.APIService v1beta1.upload.cdi.kubevirt.io"] = false
-	match[normalCreateSuccess+" *v1.APIService v1alpha1.upload.cdi.kubevirt.io"] = false
 	match[normalCreateSuccess+" *v1.ValidatingWebhookConfiguration cdi-api-datavolume-validate"] = false
 	match[normalCreateSuccess+" *v1.MutatingWebhookConfiguration cdi-api-datavolume-mutate"] = false
 	match[normalCreateSuccess+" *v1.ValidatingWebhookConfiguration cdi-api-validate"] = false

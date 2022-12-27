@@ -14,7 +14,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
@@ -60,16 +59,13 @@ var _ = Describe("DataImportCron", func() {
 		Expect(err).To(BeNil())
 		defer utils.RemoveInsecureRegistry(f.CrClient, *reg.URL)
 
-		By(fmt.Sprintf("Create labeled DatVolume %s for garbage collection test", dvName))
-		dv := utils.NewDataVolumeWithRegistryImport(dvName, "5Gi", "")
-		dv.Spec.Source.Registry = reg
-		dv.Labels = map[string]string{common.DataImportCronLabel: cronName}
-		dv.Annotations[controller.AnnDeleteAfterCompletion] = "false"
-		_, err = utils.CreateDataVolumeFromDefinition(f.CdiClient, ns, dv)
-		Expect(err).ToNot(HaveOccurred())
+		By(fmt.Sprintf("Create labeled PVC %s for garbage collection test", dvName))
+		labels := map[string]string{common.DataImportCronLabel: cronName}
+		pvc := utils.NewPVCDefinition(dvName, "5Gi", nil, labels)
+		f.CreateBoundPVCFromDefinition(pvc)
 
 		By(fmt.Sprintf("Create new DataImportCron %s, url %s", cronName, *reg.URL))
-		cron = NewDataImportCron(cronName, "5Gi", scheduleEveryMinute, dataSourceName, *reg)
+		cron = utils.NewDataImportCron(cronName, "5Gi", scheduleEveryMinute, dataSourceName, importsToKeep, *reg)
 
 		expectedImports := int(importsToKeep)
 		if !garbageCollection {
@@ -129,8 +125,8 @@ var _ = Describe("DataImportCron", func() {
 					By("Reset desired digest")
 					retryOnceOnErr(updateDataImportCron(f.CdiClient, ns, cronName, updateDigest(""))).Should(BeNil())
 
-					By("Delete last import DV")
-					err = f.CdiClient.CdiV1beta1().DataVolumes(ns).Delete(context.TODO(), currentImportDv, metav1.DeleteOptions{})
+					By("Delete last import PVC")
+					err := f.K8sClient.CoreV1().PersistentVolumeClaims(ns).Delete(context.TODO(), currentImportDv, metav1.DeleteOptions{})
 					Expect(err).ToNot(HaveOccurred())
 					lastImportDv = ""
 
@@ -216,9 +212,9 @@ var _ = Describe("DataImportCron", func() {
 		}
 		By("Check garbage collection")
 		Eventually(func() int {
-			dvList, err := f.CdiClient.CdiV1beta1().DataVolumes(ns).List(context.TODO(), metav1.ListOptions{})
+			pvcList, err := f.K8sClient.CoreV1().PersistentVolumeClaims(ns).List(context.TODO(), metav1.ListOptions{})
 			Expect(err).ToNot(HaveOccurred())
-			return len(dvList.Items)
+			return len(pvcList.Items)
 		}, dataImportCronTimeout, pollingInterval).Should(Equal(expectedImports), "Garbage collection failed cleaning old imports")
 
 		lastImportedPVC := cron.Status.LastImportedPVC
@@ -261,7 +257,7 @@ var _ = Describe("DataImportCron", func() {
 		Expect(err).To(BeNil())
 		noSuchCM := "nosuch"
 		reg.CertConfigMap = &noSuchCM
-		cron = NewDataImportCron("cron-test", "5Gi", scheduleEveryMinute, dataSourceName, *reg)
+		cron = utils.NewDataImportCron("cron-test", "5Gi", scheduleEveryMinute, dataSourceName, importsToKeep, *reg)
 		By("Create new DataImportCron")
 		cron, err = f.CdiClient.CdiV1beta1().DataImportCrons(ns).Create(context.TODO(), cron, metav1.CreateOptions{})
 		Expect(err).ToNot(HaveOccurred())
@@ -337,38 +333,6 @@ var _ = Describe("DataImportCron", func() {
 		}, dataImportCronTimeout, pollingInterval).Should(BeTrue(), "cronjob first job pod was not deleted")
 	})
 })
-
-// NewDataImportCron initializes a DataImportCron struct
-func NewDataImportCron(name, size, schedule, dataSource string, source cdiv1.DataVolumeSourceRegistry) *cdiv1.DataImportCron {
-	return &cdiv1.DataImportCron{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Annotations: map[string]string{
-				controller.AnnImmediateBinding: "true",
-			},
-		},
-		Spec: cdiv1.DataImportCronSpec{
-			Template: cdiv1.DataVolume{
-				Spec: cdiv1.DataVolumeSpec{
-					Source: &cdiv1.DataVolumeSource{
-						Registry: &source,
-					},
-					PVC: &corev1.PersistentVolumeClaimSpec{
-						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceStorage: resource.MustParse(size),
-							},
-						},
-					},
-				},
-			},
-			Schedule:          schedule,
-			ManagedDataSource: dataSource,
-			ImportsToKeep:     &importsToKeep,
-		},
-	}
-}
 
 func getDataVolumeSourceRegistry(f *framework.Framework) (*cdiv1.DataVolumeSourceRegistry, error) {
 	reg := &cdiv1.DataVolumeSourceRegistry{}
